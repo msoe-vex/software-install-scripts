@@ -48,7 +48,7 @@ This will run powershell in this location, allowing you to run these scripts. Ne
 
 **NOTE:** In the command below, replace *'n'* with *'y'* if you want to install any of the other packages. By default, we have chosen *'y'* for the Embedded Team package. Once you select your packages, run the following command.
 
-`.\RaiderRoboticsInstall.ps1 -Web n -Embedded y -DataScience n`
+    `.\RaiderRoboticsInstall.ps1 -Web n -Embedded y -DataScience n`
 
 Let this program run as needed, and complete any user installations required during the process. If the installation fails or freezes for more than 10 minutes while running, exit the script and re-run the script. **It will automatically recognize current installations, so do not uninstall anything previously done**.
 
