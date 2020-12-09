@@ -12,7 +12,7 @@ param (
     [String][ValidateSet('y','n')]$Web = 'n', 
     [String][ValidateSet('y','n')]$Embedded = 'n', 
     [String][ValidateSet('y','n')]$DataScience = 'n',
-    [String][ValidateSet('y','n')]$Debug = 'n'
+    [String][ValidateSet('y','n')]$LocalDebug = 'n'
 )
 
 Write-Host "Raider Robotics Software Installation Script"
@@ -57,4 +57,4 @@ $ScriptDirectory = 'InstallationScripts'
 $InstallationScript = Get-ChildItem -Path "$PSScriptRoot\$ScriptDirectory\*" -Include "*.ps1" | Sort-Object | Select-Object -First 1
 
 # Run the previously found script
-& $InstallationScript -Web $Web -Embedded $Embedded -DataScience $DataScience -Debug $Debug
+& $InstallationScript -Web $Web -Embedded $Embedded -DataScience $DataScience -LocalDebug $LocalDebug

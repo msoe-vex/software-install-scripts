@@ -5,7 +5,7 @@ param (
     [String][ValidateSet('y','n')]$Embedded = 'n', 
     [String][ValidateSet('y','n')]$DataScience = 'n',
     [String][ValidateSet('y','n')]$InstallWSL2 = 'n',
-    [String][ValidateSet('y','n')]$Debug = 'n',
+    [String][ValidateSet('y','n')]$LocalDebug = 'n',
     [String]$ExcludeScripts = $null
 )
 # ------ #
@@ -15,6 +15,7 @@ param (
 $ParentDir = (Get-Item $PSScriptRoot).Parent.FullName
 
 $InstallConstants = Get-ChildItem -Path "$ParentDir\*" -Include "*Constants*" | Select-Object -First 1
+
 . $InstallConstants # Import the constant variables (needs to be in parent directory, name containing "Constants")
 
 $InstallFunctions = Get-ChildItem -Path "$ParentDir\*" -Include "*Functions*" | Select-Object -First 1
@@ -35,21 +36,37 @@ If (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 
 # --- Creating RaiderRobotics Directory for Installs --- #
 
-Write-Host "Checking for default install directory..."
+Write-Host "Checking for default directory..."
 If (!(Test-Path $RaiderRoboticsDirectory)) {
     Write-Host "Default directory not found. Creating $RaiderRoboticsDirectory..." -BackgroundColor DarkGreen
     New-Item -Path "$MainDirectory\" -Name $MainSubdirectory -ItemType "directory"
     New-Item -Path "$RaiderRoboticsDirectory\" -Name $MainInstallSubdirectory -ItemType "directory"
+} 
+
+Write-Host "Checking for install directory..." -BackgroundColor DarkGreen
+If (Test-Path $RaiderRoboticsInstallDirectory) {
+    Write-Host "Previous installs found. Removing $RaiderRoboticsInstallDirectory..." -BackgroundColor DarkGreen
+    Get-ChildItem $RaiderRoboticsInstallDirectory -Recurse | Remove-Item
 } Else {
-    Write-Host "$RaiderRoboticsDirectory found. Checking for temp..." -BackgroundColor DarkGreen
-    If (Test-Path $RaiderRoboticsInstallDirectory) {
-        Write-Host "Previous installs found. Removing $RaiderRoboticsInstallDirectory..." -BackgroundColor DarkGreen
-        Get-ChildItem $RaiderRoboticsInstallDirectory -Recurse | Remove-Item
-    } Else {
-        Write-Host "No install directory found. Creating $RaiderRoboticsInstallDirectory..." -BackgroundColor DarkGreen
-        New-Item -Path "$RaiderRoboticsDirectory\$MainInstallSubdirectory"
-    }
+    Write-Host "No install directory found. Creating $RaiderRoboticsInstallDirectory..." -BackgroundColor DarkGreen
+    New-Item -Path "$RaiderRoboticsDirectory\$MainInstallSubdirectory"
 }
+
+Write-Host "Checking for script directory..." -BackgroundColor DarkGreen
+If (Test-Path $RaiderRoboticsInstallDirectory) {
+    Write-Host "Previous scripts found. Removing $RaiderRoboticsInstallScriptGitDirectory..." -BackgroundColor DarkGreen
+    Get-ChildItem $RaiderRoboticsInstallScriptGitDirectory -Recurse | Remove-Item
+} Else {
+    Write-Host "No install directory found. Creating $RaiderRoboticsInstallScriptGitDirectory..." -BackgroundColor DarkGreen
+    New-Item -Path "$RaiderRoboticsDirectory\$MainInstallScriptGitSubdirectory"
+}
+
+# ------ #
+
+# --- Copying all install folders to Raider Robotics directory --- #
+
+$ParentDir = (Get-Item $PSScriptRoot).Parent.FullName
+Copy-Item -Path "$ParentDir\*" -Destination "$RaiderRoboticsInstallScriptGitDirectory"
 
 # ------ #
 
@@ -57,7 +74,7 @@ If (!(Test-Path $RaiderRoboticsDirectory)) {
 
 Set-ExecutionPolicy Bypass -Scope Process
 
-Install-CommandIfNotInstalled -PackageName "Chocolatey" -CheckCommand "choco" -InstallCommand { Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString("https://chocolatey.org/install.ps1")) }
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Chocolatey" -CheckCommand "choco" -InstallCommand { Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')) }
 
 # Load choco into powershell environment
 $env:ChocolateyInstall = Convert-Path "$((Get-Command choco).Path)\..\.."   
@@ -71,14 +88,23 @@ Write-Host "Refreshing PATH environment, please wait..." -BackgroundColor Blue
 # --- Installing Packages --- #
 
 # Basic Software Development Tools #
-Install-CommandIfNotInstalled -PackageName "Git" -CheckCommand "git" -InstallCommand { choco install "git" -y }
-Install-CommandIfNotInstalled -PackageName "VSCode" -CheckCommand "code" -InstallCommand { choco install "vscode" -y }
-Install-CommandIfNotInstalled -PackageName "PROS" -CheckCommand "prosv5" -InstallCommand { Install-ExternalExecutable -URI $ProsURI -FileName $ProsFile }
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Git" -CheckCommand "git" -InstallCommand { choco install "git" -y }
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "VSCode" -CheckCommand "code" -InstallCommand { choco install "vscode" -y }
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Python" -CheckCommand "pip" -InstallCommand { choco install "python" -y }
+
+Update-SessionEnvironment
+
+# Phasing out from Atom IDE in favor of VSCode
+# Install-CommandIfNotInstalled -PackageName "PROS" -CheckCommand "prosv5" -InstallCommand { Install-ExternalExecutable -InstallDir $RaiderRoboticsInstallDirectory -URI $ProsURI -FileName $ProsFile }
+
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "PROS" -CheckCommand "pros" -InstallCommand { pip install "pros-cli"; Install-ExternalExecutable -InstallDir $RaiderRoboticsInstallDirectory -URI $ARMGCCURI -FileName $ARMGCCFile }
 # # #
 
 # Web Team Tools #
 If ($Web -eq "y") {
-    Install-CommandIfNotInstalled -PackageName "Node Version Manager" -CheckCommand "nvm" -InstallCommand { choco install "nvm" -y }
+    Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Node Version Manager" -CheckCommand "nvm" -InstallCommand { choco install "nvm" -y }
+
+    Install-ProgramIfNotPresentAtDirectory -InstallDir $RaiderRoboticsInstallDirectory -CheckDirectory $VS2019Directory -InstallCommand { choco install visualstudio2019community }
 }
 # # #
 
@@ -90,7 +116,7 @@ If ($Embedded -eq "y") {
 
 # Data Science Tools #
 If ($DataScience -eq "y") {
-    Install-CommandIfNotInstalled -PackageName "Anaconda" -CheckCommand "_conda" -InstallCommand { choco install "anaconda3" -y --params '"/AddToPath"' }
+    Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Anaconda" -CheckCommand "_conda" -InstallCommand { choco install "anaconda3" -y --params '"/AddToPath"' }
 }
 # # #
 
@@ -132,7 +158,7 @@ Write-Host "Installing Packages with Previous Dependencies..." -BackgroundColor 
 
 # Web Team Tools #
 If ($Web -eq "y") {
-    Install-CommandIfNotInstalled -PackageName "Yarn" -CheckCommand "yarn" -InstallCommand { choco install "yarn" -y }
+    Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Yarn" -CheckCommand "yarn" -InstallCommand { choco install "yarn" -y }
     code --install-extension "ms-vscode.powershell"
 }
 # # #
@@ -171,9 +197,10 @@ Write-Host "Refreshing PATH environment, please wait..." -BackgroundColor Blue
 
 Write-Host "Installation Complete!" -BackgroundColor DarkGreen
 
-# --- Installing and Enabling WSL : REQUIRES RESTART --- #\
+# --- Installing and Enabling WSL : REQUIRES RESTART --- #
 
-# $CurrentFile = split-path $PSCommandPath -Leaf
-# Install-CommandIfNotInstalled -PackageName "Windows Subsystem for Linux (WSL)" -CheckCommand "wslREMOVE" -InstallCommand { Install-WSLLatest -Web $Web -Embedded $Embedded -DataScience $DataScience -InstallWSL2 $InstallWSL2 -Debug $Debug -PSParams $PSParams -PSLoc $PSLoc -TaskName $TaskName -CurrentFile $CurrentFile -InstallationScriptSubdirectory $InstallationScriptSubdirectory -ExcludeScripts $ExcludeScripts }
+$CurrentFile = split-path $PSCommandPath -Leaf
+
+Install-CommandIfNotInstalled -InstallDir $RaiderRoboticsInstallDirectory -PackageName "Windows Subsystem for Linux (WSL)" -CheckCommand "wslREMOVE" -InstallCommand { Install-WSLLatest -Web $Web -Embedded $Embedded -DataScience $DataScience -InstallWSL2 $InstallWSL2 -LocalDebug $LocalDebug -PSParams $PSParams -PSLoc $PSLoc -TaskName $TaskName -CurrentFile $CurrentFile -InstallationScriptSubdirectory $InstallationScriptSubdirectory -ExcludeScripts $ExcludeScripts }
 
 # ------ #
